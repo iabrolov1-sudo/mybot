@@ -1,106 +1,61 @@
 import asyncio
 import logging
 from io import BytesIO
-import requests
-
 from aiogram import Bot, Dispatcher, F, types
-from aiogram.filters import CommandStart, Command
-from aiogram.types import BufferedInputFile
+from aiogram.filters import CommandStart
 from google import genai
-from google.genai import types as genai_types
 from PIL import Image
 
-# Вставьте ваши токены в кавычки!
-TELEGRAM_BOT_TOKEN = "8764445915:AAF5W7g11AFoxnXBF69jVv-z5s7td0bsGL0"
-GEMINI_API_KEY = "AQ.Ab8RN6Iik_Y0PE7WiAExgr9ALJHQw52U8GlxRuVdGlCjaQDjcw"
+# Ваши токены
+TELEGRAM_BOT_TOKEN = "8764445915:AAF5W7g11AFoxnXBF69jVv-z5s7tdObsGL0"
+GEMINI_API_KEY = "AQ.Ab8RN6IiK_YOPE7WiAExgr9ALJHQw52U8GlxRuvdGlCjaQDjcw"
 
-gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+# Инициализация клиентов
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 dp = Dispatcher()
+gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
 logging.basicConfig(level=logging.INFO)
 
 @dp.message(CommandStart())
-async def cmd_start(message: types.Message):
-    await message.answer(
-        "👋 Привет! Я твой AI-ассистент.\n\n"
-        "• Отправь текст, чтобы получить ответ.\n"
-        "• Отправь /img описание, чтобы получить картинку.\n"
-        "• Отправь фото с вопросом, чтобы проанализировать его."
-    )
+async def start_handler(message: types.Message):
+    await message.answer("Привет! Отправь мне текст или изображение, и я обработаю его через Gemini.")
 
-@dp.message(Command("img"))
-async def generate_image(message: types.Message):
-    prompt = message.text.replace("/img", "").strip()
-    if not prompt:
-        await message.answer("⚠️ Укажите описание картинки после /img.")
-        return
-
-    status_msg = await message.answer("🎨 *Генерирую...*")
-
+@dp.message(F.text)
+async def text_handler(message: types.Message):
     try:
-        image_url = f"https://pollinations.ai/p/{requests.utils.quote(prompt)}?width=1024&height=1024&seed=42&model=flux"
-        response = requests.get(image_url, timeout=30)
-
-        if response.status_code == 200:
-            photo = BufferedInputFile(response.content, filename="generated.png")
-            await message.answer_photo(photo=photo, caption=f"🖼 _{prompt}_")
-            await status_msg.delete()
-        else:
-            await status_msg.edit_text("❌ Ошибка генерации.")
+        # Используем асинхронный клиент client.aio
+        response = await gemini_client.aio.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=message.text
+        )
+        await message.answer(response.text if response.text else "Пустой ответ от Gemini.")
     except Exception as e:
-        await status_msg.edit_text("❌ Ошибка сервера.")
+        logging.error(f"Ошибка Gemini: {e}")
+        await message.answer(f"Ошибка API: {str(e)}")
 
 @dp.message(F.photo)
-async def analyze_photo(message: types.Message):
-    await bot.send_chat_action(chat_id=message.chat.id, action="typing")
-
+async def photo_handler(message: types.Message):
     try:
         photo = message.photo[-1]
         file_info = await bot.get_file(photo.file_id)
         photo_bytes = await bot.download_file(file_info.file_path)
-
-        img = Image.open(photo_bytes)
-        user_caption = message.caption if message.caption else "Что изображено на этом фото?"
-
-        response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=[img, user_caption]
+        
+        image = Image.open(photo_bytes)
+        caption = message.caption if message.caption else "Что изображено на этом фото?"
+        
+        # Используем асинхронный клиент client.aio
+        response = await gemini_client.aio.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=[caption, image]
         )
-
-        await message.reply(response.text)
+        await message.answer(response.text if response.text else "Не удалось разобрать изображение.")
     except Exception as e:
-        await message.answer("⚠️ Не удалось разобрать изображение.")
-
-@dp.message(F.text)
-async def chat_text(message: types.Message):
-    await bot.send_chat_action(chat_id=message.chat.id, action="typing")
-
-    try:
-        response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=message.text
-        )
-        await message.answer(response.text)
-    except Exception as e:
-        await message.answer("⚠️ Ошибка обработки запроса.")
-
-import os
-from aiohttp import web
-
-async def handle(request):
-    return web.Response(text="Bot is running!")
+        logging.error(f"Ошибка обработки фото: {e}")
+        await message.answer(f"Ошибка обработки фото: {str(e)}")
 
 async def main():
-    app = web.Application()
-    app.router.add_get("/", handle)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    port = int(os.environ.get("PORT", 10000))
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
-
     await dp.start_polling(bot)
 
-if __name__ == "__main__":
+if name == "main":
     asyncio.run(main())
