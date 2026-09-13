@@ -11,8 +11,8 @@ from google.genai import types as genai_types
 from PIL import Image
 
 # Вставьте ваши токены в кавычки!
-TELEGRAM_BOT_TOKEN = "ВАШ_ТЕЛЕГРАМ_ТОКЕН"
-GEMINI_API_KEY = "ВАШ_GEMINI_API_KEY"
+TELEGRAM_BOT_TOKEN = "8764445915:AAF5W7g11AFoxnXBF69jVv-z5s7td0bsGL0"
+GEMINI_API_KEY = "AQ.Ab8RN6Iik_Y0PE7WiAExgr9ALJHQw52U8GlxRuVdGlCjaQDjcw"
 
 gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
